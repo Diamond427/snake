@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+      height: 100vh;
+    }
+
+    canvas {
+      border: 1px solid grey;
+      width: 40vw;
+      cursor: crosshair;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="canvas" width="1300" height="900"></canvas>
+
+  <script>
+    const NEW_FRUITS_PER_FRAME = .1;
+    const INTERVAL = 30;  // 33 fps
+    const INIT_FRUIT_COUNT = 1000;
+    let fruit_counter = 0;
+
+    const playground = {
+      width: 10000,
+      height: 10000
+    }
+    const vision = {
+      x: 0, y: 0, w: 0, h: 0, zoom: 1
+    }
+    let fruits = [];
+
+    playground.canvas = document.getElementById("canvas");
+    playground.ctx = playground.canvas.getContext("2d");
+    playground.mcanvas = document.createElement("canvas");
+    playground.mcanvas.width = playground.width;
+    playground.mcanvas.height = playground.height;
+    // document.body.appendChild(playground.mcanvas);
+    playground.mctx = playground.mcanvas.getContext("2d");
+    const [w, h] = [playground.canvas.width, playground.canvas.height]
+
+    const images = {
+      background: "public/images/bg1.jpg",
+      fruit1: "public/images/fruit (1).png",
+      fruit2: "public/images/fruit (2).png",
+      fruit3: "public/images/fruit (3).png",
+      fruit4: "public/images/fruit (4).png",
+      fruit5: "public/images/fruit (5).png",
+      fruit6: "public/images/fruit (6).png",
+      fruit7: "public/images/fruit (7).png",
+      fruit8: "public/images/fruit (8).png",
+      fruit9: "public/images/fruit (9).png",
+      fruit10: "public/images/fruit (10).png",
+      fruit11: "public/images/fruit (11).png",
+      fruit12: "public/images/fruit (12).png",
+      fruit13: "public/images/fruit (13).png",
+      fruit14: "public/images/fruit (14).png",
+      fruit15: "public/images/fruit (15).png",
+      fruit16: "public/images/fruit (16).png",
+      fruit17: "public/images/fruit (17).png",
+      fruit18: "public/images/fruit (18).png"
+    }
+
+    class Animation {
+      static animateProperty(obj, key, from, to, duration = 100) {
+        return new Promise((resolve) => {
+          let elapsed = 0;
+          const timerid = setInterval(() => {
+            elapsed += INTERVAL
+            if (elapsed >= duration) {
+              clearInterval(timerid);
+              elapsed = duration
+              resolve();
+            }
+            const f = typeof from === "function" ? from() : from;
+            const t = typeof to === "function" ? to() : to;
+            obj[key] = f + (t - f) / duration * elapsed;
+          }, INTERVAL)
+        })
+      }
+    }
+
+    class Snake {
+      constructor() {
+        this.head = { x: 2000, y: 2000 };
+        this.body = [this.head];
+        this.v = { x: 1, y: 0 };
+        this.speed = 8;
+        this.color = [255, 0, 0];
+        this.score = 500;
+        this.boost = false;
+      }
+      draw(ctx) {
+        for (let i = this.body.length - 1; i >= 0; i--) {
+          const ct = Math.floor(this.score / 15000) + 1;
+          if (i % ct) continue;
+          this.body[i] && this.drawPart(ctx, this.body[i]);
+        }
+      }
+      magnetRadius() {
+        return this.thickness() * 5;
+      }
+      bgColor() {
+        return `rgb(${this.color[0]}, ${this.color[1]}, ${this.color[2]})`
+      }
+      fgColor() {
+        const r = Math.floor(this.color[0] * 0.4)
+        const g = Math.floor(this.color[1] * 0.4)
+        const b = Math.floor(this.color[2] * 0.4)
+        return `rgb(${r}, ${g}, ${b})`
+      }
+      getBodyLen() {
+        return Math.floor(this.score / 10);
+      }
+      thickness() {
+        return this.score / 3000 + 10;
+      }
+      drawPart(ctx, pt) {
+        ctx.beginPath();
+        ctx.fillStyle = this.bgColor();
+        ctx.strokeStyle = this.fgColor();
+
+        const r = this.thickness();
+        ctx.arc(pt.x - r, pt.y - r, 2 * r, 0, Math.PI * 2, false);
+        ctx.fill();
+        ctx.stroke();
+        ctx.closePath();
+      }
+      move_one_step() {
+        this.body.length = this.getBodyLen();
+
+        this.head.x += this.v.x;
+        this.head.y += this.v.y;
+
+        for (let i = 1; i < this.body.length; i++) {
+          if (!this.body[i]) {
+            this.body[i] = { ...this.body[i - 1] }
+            break;
+          }
+          const dx = this.body[i - 1].x - this.body[i].x;
+          const dy = this.body[i - 1].y - this.body[i].y;
+          const l = Math.hypot(dx, dy);
+          this.body[i].x = this.body[i - 1].x - dx / l * this.speed;
+          this.body[i].y = this.body[i - 1].y - dy / l * this.speed;
+        }
+      }
+      move() {
+        this.move_one_step();
+        if (this.boost) {
+          this.move_one_step();
+          this.score *= .999
+        }
+      }
+      eatable(fruit) {
+        const d = Math.hypot(this.head.x - fruit.pos.x, this.head.y - fruit.pos.y);
+        return d < this.magnetRadius()
+      }
+    }
+
+    class Fruit {
+      constructor() {
+        this.pos = {
+          x: Math.random() * playground.width,
+          y: Math.random() * playground.height
+        }
+        this.score = 10;
+        this.type = Math.floor(Math.random() * 0) + 1;
+      }
+      draw(ctx) {
+        const img = images["fruit" + this.type];
+        ctx.drawImage(img, 0, 0, img.width, img.height, this.pos.x - 20, this.pos.y - 20, 40, 40);
+      }
+    }
+
+    function InitResources() {
+      for (let i in images) {
+        const img = document.createElement('img');
+        img.src = images[i];
+        images[i] = img;
+      }
+    }
+
+    function init() {
+      InitResources();
+      me = new Snake();
+      for (let i = 0; i < INIT_FRUIT_COUNT; i++)
+        fruits.push(new Fruit());
+
+      playground.canvas.onmousemove = function (e) {
+        let { offsetX: x, offsetY: y } = e;
+        let { width, height } = playground.canvas.getBoundingClientRect();
+        let vx = x - width / 2, vy = y - height / 2, l = Math.hypot(vx, vy);
+        me.v.x = vx / l * me.speed;
+        me.v.y = vy / l * me.speed;
+      }
+      playground.canvas.onmousedown = function (e) {
+        me.boost = true;
+      }
+      playground.canvas.onmouseup = function (e) {
+        me.boost = false;
+      }
+    }
+
+    function drawBackground(ctx) {
+      let left = Math.floor(vision.x / images.background.width) * images.background.width;
+      let top = Math.floor(vision.y / images.background.height) * images.background.height;
+
+      for (let i = left; i < vision.x + vision.w; i += images.background.width)
+        for (let j = top; j < vision.y + vision.h; j += images.background.height)
+          ctx.drawImage(images.background, i, j);
+    }
+
+    function draw(ctx) {
+      drawBackground(ctx);
+      for (let fruit of fruits)
+        fruit.draw(ctx);
+      me.draw(ctx);
+    }
+
+    function drawInfo(ctx) {
+      ctx.font = "40px arial"
+      ctx.textBaseline = "top"
+      ctx.fillText(`Score: ${Math.floor(me.score)}`, 15, 15);
+    }
+
+    function invalidate() {
+      playground.mctx.clearRect(0, 0, w, h);
+      draw(playground.mctx);
+
+      if (vision.x < 0 || vision.y < 0
+        || vision.x + vision.w >= playground.width
+        || vision.y + vision.h >= playground.height)
+        playground.ctx.clearRect(0, 0, w, h), console.log('claer');
+
+      playground.ctx.drawImage(
+        playground.mcanvas,
+        vision.x, vision.y, vision.w, vision.h,
+        0, 0, w, h
+      );
+
+      drawInfo(playground.ctx);
+    }
+
+    function update() {
+      me.move();
+
+      vision.w = w / vision.zoom;
+      vision.h = h / vision.zoom;
+      vision.x = me.head.x - vision.w / 2;
+      vision.y = me.head.y - vision.h / 2;
+
+      for (let fruit of fruits) {
+        if (me.eatable(fruit)) {
+          console.log('eatable')
+          Animation.animateProperty(fruit.pos, "x", fruit.pos.x, () => me.head.x);
+          Animation.animateProperty(fruit.pos, "y", fruit.pos.y, () => me.head.y)
+            .then(() => {
+              fruits = fruits.filter(it => it !== fruit);
+              me.score += fruit.score
+            })
+        }
+      }
+
+      fruit_counter += NEW_FRUITS_PER_FRAME;
+      while (fruit_counter > 0) {
+        fruit_counter--;
+        fruits.push(new Fruit());
+      }
+    }
+
+    window.onload = function () {
+      init();
+
+      setInterval(() => {
+        update();
+        invalidate();
+      }, INTERVAL);
+    }
+  </script>
+</body>
+
+</html>
