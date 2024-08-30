@@ -8,6 +8,7 @@
   <style>
     body {
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
       margin: 0;
@@ -31,12 +32,15 @@
     const INIT_FRUIT_COUNT = 1000;
     let fruit_counter = 0;
 
+    const ZOOM_EFFECT_LASTING_TIME = 10e3; // 10s
+    let zoom_effect_counter = 0;
+
     const playground = {
       width: 10000,
       height: 10000
     }
     const vision = {
-      x: 0, y: 0, w: 0, h: 0, zoom: 1
+      x: 0, y: 0, w: 0, h: 0, zoom: 1, zoom_effect: 1
     }
     let fruits = [];
 
@@ -111,6 +115,12 @@
         return this.thickness() * 5;
       }
       bgColor() {
+        if (this.boost) {
+          const r = Math.floor((this.color[0] + 255 * 3) / 4);
+          const g = Math.floor((this.color[1] + 255 * 3) / 4);
+          const b = Math.floor((this.color[2] + 255 * 3) / 4);
+          return `rgb(${r}, ${g}, ${b})`;
+        }
         return `rgb(${this.color[0]}, ${this.color[1]}, ${this.color[2]})`
       }
       fgColor() {
@@ -165,6 +175,22 @@
         const d = Math.hypot(this.head.x - fruit.pos.x, this.head.y - fruit.pos.y);
         return d < this.magnetRadius()
       }
+      eat(fruit) {
+        this.score += fruit.score
+        if (fruit.type === 2) {
+          // increase vision range
+          Animation.animateProperty(vision, "zoom_effect", vision.zoom_effect, 0.5, 1000);
+
+          console.log(window._timerid_zoom_effect);
+
+          if (window._timerid_zoom_effect)
+            clearTimeout(window._timerid_zoom_effect);
+
+          window._timerid_zoom_effect = setTimeout(() => {
+            Animation.animateProperty(vision, "zoom_effect", vision.zoom_effect, 1, 1000);
+          }, ZOOM_EFFECT_LASTING_TIME);
+        }
+      }
     }
 
     class Fruit {
@@ -175,6 +201,10 @@
         }
         this.score = 10;
         this.type = Math.floor(Math.random() * 0) + 1;
+
+        if (Math.random() < 2e-2) {
+          this.type = 2;
+        }
       }
       draw(ctx) {
         const img = images["fruit" + this.type];
@@ -240,7 +270,7 @@
       if (vision.x < 0 || vision.y < 0
         || vision.x + vision.w >= playground.width
         || vision.y + vision.h >= playground.height)
-        playground.ctx.clearRect(0, 0, w, h), console.log('claer');
+        playground.ctx.clearRect(0, 0, w, h);
 
       playground.ctx.drawImage(
         playground.mcanvas,
@@ -254,19 +284,18 @@
     function update() {
       me.move();
 
-      vision.w = w / vision.zoom;
-      vision.h = h / vision.zoom;
+      vision.w = w / vision.zoom / vision.zoom_effect;
+      vision.h = h / vision.zoom / vision.zoom_effect;
       vision.x = me.head.x - vision.w / 2;
       vision.y = me.head.y - vision.h / 2;
 
       for (let fruit of fruits) {
         if (me.eatable(fruit)) {
-          console.log('eatable')
           Animation.animateProperty(fruit.pos, "x", fruit.pos.x, () => me.head.x);
           Animation.animateProperty(fruit.pos, "y", fruit.pos.y, () => me.head.y)
             .then(() => {
               fruits = fruits.filter(it => it !== fruit);
-              me.score += fruit.score
+              me.eat(fruit);
             })
         }
       }
